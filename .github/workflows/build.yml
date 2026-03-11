@@ -4,13 +4,13 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4 # v3 -> v4 yaptık
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v1.1
+        uses: microsoft/setup-msbuild@v2 # v1.1 -> v2 yaptık
       - name: Build Solution
         run: msbuild LibreHardwareMonitor.sln /p:Configuration=Release
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4 # v3 -> v4 yaptık
         with:
           name: LHM-Test-Build
           path: bin/Release/
