@@ -1,151 +1,54 @@
-﻿// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
-// If a copy of the MPL was not distributed with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
-// Copyright (C) LibreHardwareMonitor and Contributors.
-// All Rights Reserved.
-
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net.NetworkInformation;
-using System.Text;
+using LibreHardwareMonitor.Hardware;
 
-namespace LibreHardwareMonitor.Hardware.Network;
-
-internal class NetworkGroup : IGroup, IHardwareChanged
+namespace LibreHardwareMonitorLib.Hardware.Network
 {
-    public event HardwareEventHandler HardwareAdded;
-    public event HardwareEventHandler HardwareRemoved;
-
-    private readonly object _updateLock = new();
-    private readonly ISettings _settings;
-    private List<Network> _hardware = [];
-
-    public NetworkGroup(ISettings settings)
+    internal class Network : Hardware
     {
-        _settings = settings;
-        UpdateNetworkInterfaces(settings);
+        private readonly Sensor _load;
+        private readonly Sensor _dataDownload;
+        private readonly Sensor _dataUpload;
+        private readonly Sensor _bandwidth; // Yeni eklediğimiz Link Speed sensörü
+        private readonly NetworkInterface _networkInterface;
 
-        NetworkChange.NetworkAddressChanged += NetworkChange_NetworkAddressChanged;
-        NetworkChange.NetworkAvailabilityChanged += NetworkChange_NetworkAddressChanged;
-    }
-
-    public IReadOnlyList<IHardware> Hardware => _hardware;
-
-    public string GetReport()
-    {
-        var report = new StringBuilder();
-
-        foreach (Network network in _hardware)
+        public Network(NetworkInterface networkInterface, Identifier identifier, ISettings settings)
+            : base(networkInterface.Name, identifier, settings)
         {
-            report.AppendLine(network.NetworkInterface.Description);
-            report.AppendLine(network.NetworkInterface.OperationalStatus.ToString());
-            report.AppendLine();
+            _networkInterface = networkInterface;
 
-            foreach (ISensor sensor in network.Sensors)
-            {
-                report.AppendLine(sensor.Name);
-                report.AppendLine(sensor.Value.ToString());
-                report.AppendLine();
-            }
+            // Sensörleri tanımlıyoruz
+            _load = new Sensor("Network Load", 0, SensorType.Load, this, settings);
+            _dataDownload = new Sensor("Download Speed", 1, SensorType.Data, this, settings);
+            _dataUpload = new Sensor("Upload Speed", 2, SensorType.Data, this, settings);
+            
+            // Link Speed (Bağlantı Hızı) Sensörü - Mbps cinsinden
+            _bandwidth = new Sensor("Link Speed", 3, SensorType.Factor, this, settings);
+
+            ActivateSensor(_load);
+            ActivateSensor(_dataDownload);
+            ActivateSensor(_dataUpload);
+            ActivateSensor(_bandwidth);
         }
 
-        return report.ToString();
-    }
+        public override HardwareType HardwareType => HardwareType.Network;
 
-    public void Close()
-    {
-        NetworkChange.NetworkAddressChanged -= NetworkChange_NetworkAddressChanged;
-        NetworkChange.NetworkAvailabilityChanged -= NetworkChange_NetworkAddressChanged;
-
-        foreach (Network network in _hardware)
-            network.Close();
-    }
-
-    private void UpdateNetworkInterfaces(ISettings settings)
-    {
-        // When multiple events fire concurrently, we don't want threads interfering
-        // with others as they manipulate non-thread safe state.
-        lock (_updateLock)
+        public override void Update()
         {
-            List<NetworkInterface> networkInterfaces = GetNetworkInterfaces();
-            if (networkInterfaces == null)
-                return;
-
-            List<Network> removables = [];
-            List<Network> additions = [];
-
-            List<Network> hardware = [.. _hardware];
-
-            // Remove network interfaces that no longer exist.
-            for (int i = 0; i < hardware.Count; i++)
+            try 
             {
-                Network network = hardware[i];
-                if (networkInterfaces.Any(x => x.Id == network.NetworkInterface.Id))
-                    continue;
+                // Bağlantı hızını çekiyoruz (bps -> Mbps dönüşümü)
+                // 1000000'a bölerek 10, 100 veya 1000 değerini elde ederiz.
+                _bandwidth.Value = (float)(_networkInterface.Speed / 1,000,000.0);
 
-                hardware.RemoveAt(i--);
-                removables.Add(network);
+                // Diğer trafik verilerini güncelle (mevcut LHM kodları buraya gelecek)
+                // ... (mevcut Update kodların)
             }
-
-            // Add new ones.
-            foreach (NetworkInterface networkInterface in networkInterfaces)
+            catch (Exception) 
             {
-                if (hardware.All(x => x.NetworkInterface.Id != networkInterface.Id))
-                {
-                    Network network = new(networkInterface, settings);
-                    hardware.Add(network);
-                    additions.Add(network);
-                }
+                // Hata durumunda boş geç
             }
-
-            _hardware = hardware;
-
-            foreach (Network removable in removables)
-                HardwareRemoved?.Invoke(removable);
-
-            foreach (Network addition in additions)
-                HardwareAdded?.Invoke(addition);
-        }
-    }
-
-    private static List<NetworkInterface> GetNetworkInterfaces()
-    {
-        int retry = 0;
-
-        while (retry++ < 5)
-        {
-            try
-            {
-                return NetworkInterface.GetAllNetworkInterfaces()
-                                       .Where(IsDesiredNetworkType)
-                                       .OrderBy(static x => x.Name)
-                                       .ToList();
-            }
-            catch (NetworkInformationException)
-            {
-                // Disabling IPv4 while running can cause a NetworkInformationException: The pipe is being closed.
-                // This can be retried.
-            }
-        }
-
-        return null;
-    }
-
-    private void NetworkChange_NetworkAddressChanged(object sender, EventArgs e)
-    {
-        UpdateNetworkInterfaces(_settings);
-    }
-
-    private static bool IsDesiredNetworkType(NetworkInterface nic)
-    {
-        switch (nic.NetworkInterfaceType)
-        {
-            case NetworkInterfaceType.Loopback:
-            case NetworkInterfaceType.Tunnel:
-            case NetworkInterfaceType.Unknown:
-                return false;
-            default:
-                return true;
         }
     }
 }
