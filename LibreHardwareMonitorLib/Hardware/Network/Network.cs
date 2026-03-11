@@ -5,13 +5,12 @@ using LibreHardwareMonitor.Hardware;
 
 namespace LibreHardwareMonitorLib.Hardware.Network
 {
-    // Hata almamak için tam yoluyla (Full Path) belirttik
     internal class Network : LibreHardwareMonitor.Hardware.Hardware
     {
         private readonly Sensor _load;
         private readonly Sensor _dataDownload;
         private readonly Sensor _dataUpload;
-        private readonly Sensor _linkSpeed; // Yeni sensörümüz
+        private readonly Sensor _linkSpeed; 
         private readonly NetworkInterface _networkInterface;
 
         public Network(NetworkInterface networkInterface, Identifier identifier, ISettings settings)
@@ -22,8 +21,6 @@ namespace LibreHardwareMonitorLib.Hardware.Network
             _load = new Sensor("Network Load", 0, SensorType.Load, this, settings);
             _dataDownload = new Sensor("Download Speed", 1, SensorType.Data, this, settings);
             _dataUpload = new Sensor("Upload Speed", 2, SensorType.Data, this, settings);
-            
-            // Link Speed (Mbps) - 3 numaralı index ile ekliyoruz
             _linkSpeed = new Sensor("Link Speed", 3, SensorType.Factor, this, settings);
 
             ActivateSensor(_load);
@@ -38,17 +35,13 @@ namespace LibreHardwareMonitorLib.Hardware.Network
         {
             try 
             {
-                // nic.Speed bps (bit per second) döner. 
-                // 1,000,000'a bölerek Mbps elde ediyoruz.
                 if (_networkInterface != null)
                 {
+                    // bps -> Mbps (1,000,000'a bölüyoruz)
                     _linkSpeed.Value = (float)(_networkInterface.Speed / 1000000.0f);
                 }
             }
-            catch (Exception) 
-            {
-                // Hata olursa değeri sıfırla veya eski değerde bırak
-            }
+            catch (Exception) { }
         }
     }
 }
