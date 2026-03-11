@@ -1,54 +1,33 @@
-using System;
 using System.Collections.Generic;
 using System.Net.NetworkInformation;
-using LibreHardwareMonitor.Hardware;
 
 namespace LibreHardwareMonitorLib.Hardware.Network
 {
-    internal class Network : Hardware
+    internal class NetworkGroup : IGroup
     {
-        private readonly Sensor _load;
-        private readonly Sensor _dataDownload;
-        private readonly Sensor _dataUpload;
-        private readonly Sensor _bandwidth; // Yeni eklediğimiz Link Speed sensörü
-        private readonly NetworkInterface _networkInterface;
+        private readonly List<Network> _hardware = new List<Network>();
 
-        public Network(NetworkInterface networkInterface, Identifier identifier, ISettings settings)
-            : base(networkInterface.Name, identifier, settings)
+        public NetworkGroup(ISettings settings)
         {
-            _networkInterface = networkInterface;
+            if (!NetworkInterface.GetIsNetworkInterfaceAvailable())
+                return;
 
-            // Sensörleri tanımlıyoruz
-            _load = new Sensor("Network Load", 0, SensorType.Load, this, settings);
-            _dataDownload = new Sensor("Download Speed", 1, SensorType.Data, this, settings);
-            _dataUpload = new Sensor("Upload Speed", 2, SensorType.Data, this, settings);
-            
-            // Link Speed (Bağlantı Hızı) Sensörü - Mbps cinsinden
-            _bandwidth = new Sensor("Link Speed", 3, SensorType.Factor, this, settings);
+            NetworkInterface[] interfaces = NetworkInterface.GetAllNetworkInterfaces();
+            foreach (NetworkInterface networkInterface in interfaces)
+            {
+                if (networkInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+                    continue;
 
-            ActivateSensor(_load);
-            ActivateSensor(_dataDownload);
-            ActivateSensor(_dataUpload);
-            ActivateSensor(_bandwidth);
+                _hardware.Add(new Network(networkInterface, new Identifier("network", networkInterface.Id), settings));
+            }
         }
 
-        public override HardwareType HardwareType => HardwareType.Network;
+        public IEnumerable<IHardware> Hardware => _hardware;
 
-        public override void Update()
+        public void Close()
         {
-            try 
-            {
-                // Bağlantı hızını çekiyoruz (bps -> Mbps dönüşümü)
-                // 1000000'a bölerek 10, 100 veya 1000 değerini elde ederiz.
-                _bandwidth.Value = (float)(_networkInterface.Speed / 1,000,000.0);
-
-                // Diğer trafik verilerini güncelle (mevcut LHM kodları buraya gelecek)
-                // ... (mevcut Update kodların)
-            }
-            catch (Exception) 
-            {
-                // Hata durumunda boş geç
-            }
+            foreach (Network network in _hardware)
+                network.Close();
         }
     }
 }
